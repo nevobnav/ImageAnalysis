@@ -259,7 +259,7 @@ def merge_close_points(gdf, list_of_distances):
     print('removing double counts took ' + str(toc-tic) + ' seconds.')
     return gpdf
 
-def contours2shp(plant_pixels, process_full_image, model, out_path, min_area, max_area, clip_ortho2shp, ds, run_classification):
+def contours2shp(plant_pixels, out_path, min_area, max_area, ds, run_classification = False):
 
     #Get contours of features
     contours, hierarchy = cv2.findContours(plant_pixels, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)

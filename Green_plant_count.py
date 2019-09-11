@@ -52,13 +52,15 @@ y_block_size = 512
 it = list(range(0,200000, 1))
 
 #True if you want to generate shapefile output with points and shapes of plants
-process_full_image = True
+vectorize_output = True
 #True if you want to fit the cluster centres iteratively to every image block, false if you fit in once to a random 10% subset of the entire ortho
 iterative_fit = False
 #True to clip ortho to clip_shape (usefull for removing grass around the fields)
 clip_ortho2shp = True
 #True to create a tif file of the plant mask of the image.
 tif_output = True
+#True if you want to write plant count and segmentation from clustering to file
+write_shp2file = False
 
 #%%
 #Set variables for local maxima plant count
@@ -88,6 +90,11 @@ green_init = np.array(green_lab[0,0,1:3])
 #Create init input for clustering algorithm
 kmeans_init = np.array([background_init, green_init, cover_init])
 #%%
+#Set other variables
+
+#Set distances for merging of close points, provide a list with slowely increasing values for best result
+list_of_distances = [0.05, 0.08, 0.12, 0.16, 0.22]
+#%%
 #Run script
 
 if __name__ == '__main__2':
@@ -107,7 +114,13 @@ if __name__ == '__main__2':
     #Detect center of plants using local minima
     xcoord, ycoord = dp.DetectLargeImage(img_path, ds, div_shape, sigma, neighborhood_size, threshold, sigma_grass)
     #Write to shapefile
-    gdf2 = vector_functions.coords2gdf(ds, xcoord, ycoord)
+    gdf_local_max = vector_functions.coords2gdf(ds, xcoord, ycoord)
+    
+    #Add area column to gdf_local_max
+    gdf_local_max = vector_functions.add_random_area_column(gdf_local_max)
+    #Add column to specify that the area is not a correct measurement
+    gdf['correct_area'] = False
+
     
     #Create array with the positions of the coordinates
     arr_points = np.zeros([yblocks*block_size//10,xblocks*block_size//10], dtype='uint8')
@@ -123,11 +136,37 @@ if __name__ == '__main__2':
     time_end = time.time()
     print('Total time: {}'.format(time_end-time_begin))
     #%%
-    #
+    #Perform clustering
     plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
-    #write clustering output to tif to be able to inspect
+    
+    #Write clustering output to tif to be able to inspect
     raster_functions.array2tif(img_path, out_path, clustering_output, name_extension = 'clustering_output')
     
+    #Save some memory
+    clustering_output = None
+    
+    if vectorize_output == True:
+        #Get contours of plants and create a df with derived characteristics.
+        #At this point there is no proper classification algorithm so run_classification = False
+        df = plant_count_functions.contours2shp(plant_pixels, out_path, min_area, max_area, ds, run_classification = False)
+        
+        #Convert df to gdf
+        gdf_points, gdf_shapes = vector_functions.detected_plants2projected_shp_and_points(img_path, out_path, df, ds, write_shp2file)
+        
+        #Add column to specify that area is correct measurement
+        gdf_points['correct_area'] = True
+        
+        #Append both count dataframes
+        gdf = vector_functions.append_gdfs(gdf_points, gdf_local_max)
+        
+        #Merge close points
+        gdf = vector_functions.merge_close_points(gdf, list_of_distances)
+        
+        #Write output to geopackage
+        gdf.to_file(os.path.join(out_path, (os.path.basename(img_path)[-16:-4] + '_plant_count.gpkg')), driver = 'GPKG')
+        
+        
+
     
 
     

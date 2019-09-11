@@ -6,27 +6,16 @@ Created on Tue Sep 10 14:22:16 2019
 """
 
 
-import pandas as pd
+import os
 
-import cv2
 import numpy as np
-import numpy.ma as ma
 import pandas as pd
-
-#import rasterio
-import gdal
 import geopandas as gpd
 import rasterio
-from rasterio.features import shapes
-from shapely.geometry import mapping, Polygon, shape, Point, MultiPolygon
-
-from functools import partial
-from shapely.ops import transform
-import pyproj
 
 import json
-from rasterio.mask import mask as rast_mask
 from affine import Affine
+from shapely.geometry import Point, Polygon
 
 def coords2gdf(ds, xcoord, ycoord):
     coord_lst = [rasterio.transform.xy(transform = Affine.from_gdal(*ds.GetGeoTransform()), rows = ycoord[i], cols = xcoord[i], offset='ul') for i in range(len(xcoord))]
