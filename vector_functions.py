@@ -84,7 +84,7 @@ def multi2single(gpdf):
 def append_gdfs(gdf1, gdf2):
     index_gdf2 = list(range(len(gdf1), len(gdf1)+len(gdf2)))
     gdf2.index = index_gdf2
-    gdf2.drop(['id'], axis = 1, inplace = True)
+    #gdf2.drop(['id'], axis = 1, inplace = True)
     gdf = pd.concat([gdf1, gdf2], sort = False)
     return gdf    
     

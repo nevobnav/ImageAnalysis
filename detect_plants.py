@@ -6,8 +6,8 @@ Module for detecting plants using local minima
 @author: Arthur
 """
 import sys
-sys.path.insert(1, "C:\\Users\\Arthur\\Documents\\Study\\Internship VanBoven\\Project - Identifying Broccoli Heads\\Code\\Modules")
-import image_processing as ip
+
+import ImageAnalysis.image_processing as ip
 
 import numpy as np
 from scipy import ndimage
@@ -67,7 +67,7 @@ def DetectLargeImage(img_path, ds, div_shape, sigma, neighborhood_size, threshol
             try:
                 # Read part of image
                 print('Block: n={}, m={}'.format(n,m))
-                img_extended = ip.ReadImagePartExtra(img_path, div_shape, n, m, extra)
+                img_extended = ip.ReadImagePartExtra(img_path, div_shape, n, m, extra, ds)
                 # Convert to a* channel and Cb channel
                 img_a = cv2.cvtColor(img_extended, cv2.COLOR_BGR2Lab)[:,:,1]
                 img_gauss = np.uint8(ndimage.gaussian_filter(downscale_local_mean(
@@ -100,7 +100,7 @@ def DetectLargeImage(img_path, ds, div_shape, sigma, neighborhood_size, threshol
                 
                 img_a = None
                 
-                ip.ShowImage(img_gauss_Cb_bin)
+                #ip.ShowImage(img_gauss_Cb_bin)
                 # Sort x_arr and y_arr in unison
                 sort_idx = y_arr.argsort()
                 y_arr_sort = y_arr[sort_idx]

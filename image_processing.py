@@ -75,9 +75,8 @@ def plot_partition(img, block, yblocks, xblocks, data_path):
     ax.axis('off')
     plt.savefig(data_path+'Partition.png',bbox_inches = 'tight',pad_inches=0, dpi=300)
 
-def read_image_part(path, div_shape, n, m):
-    ds, ysize, xsize, yblocks, xblocks, block_size = div_shape
-    ds = gdal.Open(path)
+def read_image_part(path, div_shape, n, m, ds):
+    ysize, xsize, yblocks, xblocks, block_size = div_shape
     
     begin_n = n*block_size
     if n == yblocks-1:
@@ -106,10 +105,9 @@ def read_image_part(path, div_shape, n, m):
         raise ValueError('This block is not part of the image.')
     return img
 
-def ReadImagePartExtra(path, div_shape, n, m, extra):
+def ReadImagePartExtra(path, div_shape, n, m, extra, ds):
     """Returns image with extra boundary to the left and right"""
-    ds, ysize, xsize, yblocks, xblocks, block_size = div_shape
-    ds = gdal.Open(path)
+    ysize, xsize, yblocks, xblocks, block_size = div_shape
     
     if m==0:
         img = np.zeros([block_size,block_size+1*extra,3], dtype = np.uint(8))

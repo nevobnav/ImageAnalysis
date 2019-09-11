@@ -8,29 +8,31 @@ Created on Wed Sep 11 11:51:08 2019
 #%%
 #Import statements
 import os
-import sys
 import time
 
 import cv2
 import numpy as np
 import gdal
 
-os.chdir(os.path.dirname(os.path.dirname(sys.argv[0])))
-import Vector_functions.vector_functions
-import Vector_functions.raster_functions
-import Vector_functions.plant_count_functions
-import Vector_functions.image_processing as ip
-import Vector_functions.detect_plants as dp
+#os.chdir(os.path.dirname(os.path.dirname(sys.argv[0])) + '/ImageAnalysis')
+os.chdir(r'C:\Users\ericv\Dropbox\Python scripts\GitHub')
 
-import VanBovenProcessing.clip_ortho_2_plot_gdal
+import ImageAnalysis.vector_functions as vector_functions
+import ImageAnalysis.raster_functions as raster_functions
+import ImageAnalysis.plant_count_functions as plant_count_functions
+import ImageAnalysis.image_processing as ip
+import ImageAnalysis.detect_plants as dp
+
+#os.chdir(os.path.dirname(os.getcwd()) + '/VanBovenProcessing') 
+#import VanBovenProcessing.clip_ortho_2_plot_gdal
 
 #%%
 #Specify paths
 
 #Input img_path
-img_path = r"D:\VanBovenDrive\VanBoven MT\Archive\c03_termote\De Boomgaard\20190625\1112\Orthomosaic\c03_termote-De Boomgaard-201906251112-GR.tif"
+img_path = r"C:\Users\ericv\Desktop\VanBoven\data\Wever_west\c01_verdonk-Wever west-201907170749-GR_clipped.tif"
 #Output path
-out_path = r'D:\800 Operational\c03_termote\De Boomgaard\20190625\1112' 
+out_path = r'C:\Users\ericv\Desktop\VanBoven\data\output' 
 #Specify path to clip_shp
 clip_shp = r"D:\VanBovenDrive\VanBoven MT\Archive\c03_termote\De Boomgaard\20190514\2005\Clip_shape\clip_shape.shp"
 
@@ -54,13 +56,13 @@ it = list(range(0,200000, 1))
 #True if you want to generate shapefile output with points and shapes of plants
 vectorize_output = True
 #True if you want to fit the cluster centres iteratively to every image block, false if you fit in once to a random 10% subset of the entire ortho
-iterative_fit = False
+iterative_fit = True
 #True to clip ortho to clip_shape (usefull for removing grass around the fields)
-clip_ortho2shp = True
+clip_ortho2shp = False
 #True to create a tif file of the plant mask of the image.
 tif_output = True
 #True if you want to write plant count and segmentation from clustering to file
-write_shp2file = False
+write_shp2file = True
 
 #%%
 #Set variables for local maxima plant count
@@ -97,18 +99,18 @@ list_of_distances = [0.05, 0.08, 0.12, 0.16, 0.22]
 #%%
 #Run script
 
-if __name__ == '__main__2':
+if __name__ == '__main__':
     if clip_ortho2shp == True:
         ds = clip_ortho_2_plot_gdal.clip_ortho2shp_array(img_path, clip_shp)
     else:
         ds = gdal.Open(img_path)
-    time_begin = time.time()
 
     #%% 
     #Run local maxima plant detector
+    time_begin = time.time()
     
     #Get information of image partition
-    div_shape = ip.divide_image(img_path, block_size, remove_size=block_size)
+    div_shape = ip.divide_image(ds, block_size, remove_size=block_size)
     ysize, xsize, yblocks, xblocks, block_size = div_shape
     
     #Detect center of plants using local minima
@@ -117,22 +119,23 @@ if __name__ == '__main__2':
     gdf_local_max = vector_functions.coords2gdf(ds, xcoord, ycoord)
     
     #Add area column to gdf_local_max
-    gdf_local_max = vector_functions.add_random_area_column(gdf_local_max)
+    gdf_local_max = plant_count_functions.add_random_area_column(gdf_local_max)
     #Add column to specify that the area is not a correct measurement
-    gdf['correct_area'] = False
-
-    
-    #Create array with the positions of the coordinates
-    arr_points = np.zeros([yblocks*block_size//10,xblocks*block_size//10], dtype='uint8')
-    arr_points[(ycoord/10).astype(int),(xcoord/10).astype(int)] = 1
-    arr_points = cv2.dilate(arr_points,np.ones((3,3),np.uint8),iterations = 1)
-    
-    #Detect lines using Hough Lines Transform
-    lines = dp.HoughLinesP(arr_points, par_fact)
-    #Write to shapefile
-    lines = lines.reshape(lines.shape[0],4) * 10
-    dp.WriteShapefileLines(ds, lines[:,0], lines[:,1], lines[:,2], lines[:,3], out_path)
-    
+    gdf_local_max['correct_area'] = 0
+# =============================================================================
+#     
+#     #Create array with the positions of the coordinates
+#     arr_points = np.zeros([yblocks*block_size//10,xblocks*block_size//10], dtype='uint8')
+#     arr_points[(ycoord/10).astype(int),(xcoord/10).astype(int)] = 1
+#     arr_points = cv2.dilate(arr_points,np.ones((3,3),np.uint8),iterations = 1)
+#     
+#     #Detect lines using Hough Lines Transform
+#     lines = dp.HoughLinesP(arr_points, par_fact)
+#     #Write to shapefile
+#     lines = lines.reshape(lines.shape[0],4) * 10
+#     dp.WriteShapefileLines(ds, lines[:,0], lines[:,1], lines[:,2], lines[:,3], out_path)
+#     
+# =============================================================================
     time_end = time.time()
     print('Total time: {}'.format(time_end-time_begin))
     #%%
@@ -154,13 +157,13 @@ if __name__ == '__main__2':
         gdf_points, gdf_shapes = vector_functions.detected_plants2projected_shp_and_points(img_path, out_path, df, ds, write_shp2file)
         
         #Add column to specify that area is correct measurement
-        gdf_points['correct_area'] = True
+        gdf_points['correct_area'] = 1
         
         #Append both count dataframes
         gdf = vector_functions.append_gdfs(gdf_points, gdf_local_max)
         
         #Merge close points
-        gdf = vector_functions.merge_close_points(gdf, list_of_distances)
+        gdf = plant_count_functions.merge_close_points(gdf, list_of_distances)
         
         #Write output to geopackage
         gdf.to_file(os.path.join(out_path, (os.path.basename(img_path)[-16:-4] + '_plant_count.gpkg')), driver = 'GPKG')

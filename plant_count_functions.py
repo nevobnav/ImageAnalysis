@@ -13,12 +13,12 @@ import math
 import cv2
 import numpy as np
 import scipy
-
+import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
 import geopandas as gpd
 import random
-from raster_functions import resize
+from ImageAnalysis.raster_functions import resize
 
 def fit_kmeans_on_subset(ds, kmeans_init):
     #get raster
@@ -82,16 +82,16 @@ def cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, 
     #iterate through img using blocks to reduce memory consumption and make function less vulnarable to changes in lighting
     blocks = 0
     for y in range(0, ysize, y_block_size):
-        if y > 30:
-            y = y - 30 # use -30 pixels overlap to prevent "lines at the edges of blocks in object detection"
+        if y > 10:
+            y = y - 10 # use -30 pixels overlap to prevent "lines at the edges of blocks in object detection"
         if y + y_block_size < ysize:
             rows = y_block_size
         else:
             rows = ysize - y
 
         for x in range(0, xsize, x_block_size):
-            if x > 30:
-                x = x - 30
+            if x > 10:
+                x = x - 10
             blocks += 1
             #if statement for subset
             if blocks in it:
@@ -120,7 +120,6 @@ def cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, 
     
                     #convert img to CieLAB colorspace
                     img_lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-                    img = None
                     
                     #get a and b bands
                     a = np.array(img_lab[:,:,1])
