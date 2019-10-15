@@ -13,6 +13,7 @@ import time
 import cv2
 import numpy as np
 import gdal
+import multiprocessing as mp
 
 #os.chdir(os.path.dirname(os.path.dirname(sys.argv[0])) + '/ImageAnalysis')
 os.chdir(r'C:\Users\ericv\Dropbox\Python scripts\GitHub')
@@ -63,6 +64,9 @@ clip_ortho2shp = False
 tif_output = True
 #True if you want to write plant count and segmentation from clustering to file
 write_shp2file = True
+
+#number of processes for the multiprocessing part
+n_processes = 4
 
 #%%
 #Set variables for local maxima plant count
@@ -140,7 +144,14 @@ if __name__ == '__main__':
     print('Total time: {}'.format(time_end-time_begin))
     #%%
     #Perform clustering
-    plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
+#    plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
+    imgs, xs, ys, cols_list, rows_list, kmeans = plant_count_functions.divide_into_blocks(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it)
+    p = mp.Pool(n_processes)
+    results = [p.apply_async(plant_count_functions.cluster_objects_block, (imgs[i], no_data_value, iterative_fit, kmeans)) for i in range(len(imgs))]
+    closings = [res.get()[0] for res in results]
+    clustering_results = [res.get()[1] for res in results]
+    plant_pixels, clustering_output = plant_count_functions.handle_output(closings, clustering_results, xs, ys, cols_list, rows_list, xsize, ysize)
+    
     
     #Write clustering output to tif to be able to inspect
     raster_functions.array2tif(img_path, out_path, clustering_output, name_extension = 'clustering_output')
