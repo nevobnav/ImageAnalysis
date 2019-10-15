@@ -22,28 +22,93 @@ import random
 from ImageAnalysis.raster_functions import resize
 
 def fit_kmeans_on_subset(ds, kmeans_init):
-    #get raster
-    r = np.array(ds.GetRasterBand(1).ReadAsArray(), dtype = np.uint(8))
-    img = np.zeros([r.shape[0],r.shape[1],3], np.uint8)
-    img[:,:,2] = r
-    r = None
-    g = np.array(ds.GetRasterBand(2).ReadAsArray(), dtype = np.uint(8))
-    img[:,:,1] = g
-    g = None
-    b = np.array(ds.GetRasterBand(3).ReadAsArray(), dtype = np.uint(8))
-    img[:,:,0] = b
-    b = None
+# =============================================================================
+#     #get raster
+#     r = np.array(ds.GetRasterBand(1).ReadAsArray(), dtype = np.uint(8))
+#     img = np.zeros([r.shape[0],r.shape[1],3], np.uint8)
+#     img[:,:,2] = r
+#     r = None
+#     g = np.array(ds.GetRasterBand(2).ReadAsArray(), dtype = np.uint(8))
+#     img[:,:,1] = g
+#     g = None
+#     b = np.array(ds.GetRasterBand(3).ReadAsArray(), dtype = np.uint(8))
+#     img[:,:,0] = b
+#     b = None
+# 
+#     #take random subset of image nog toevoegen maar nu geen internet    
+#     Lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+#     Lab_flat = Lab.flatten()
+#     Lab = None
+#     
+#     subset = scipy.random.choice(Lab_flat, size = (len(Lab_flat)//10), replace = False)
+#     Lab_flat = None
+#     #get a and b band of subset
+#     a = subset[:,1]
+#     b = subset[:,2]
+#     subset = None
+# 
+#     #stack bands to create final input for clustering algorithm
+#     Classificatie_Lab = np.column_stack((a, b))
+#     a = None
+#     b = None
+# 
+#     tic = time.time()
+#     #perform kmeans clustering
+#     kmeans = KMeans(init = kmeans_init, n_jobs = -1, max_iter = 50, n_clusters = kmeans_init.shape[0], verbose = 0, precompute_distances = False)
+#     kmeans.fit(Classificatie_Lab)
+#     toc = time.time()
+# 
+#     print('Processing took ' + str(toc-tic) + ' seconds')
+#     
+# =============================================================================    
+    band = ds.GetRasterBand(1)
+    xsize = band.XSize
+    ysize = band.YSize
+    #define size of img blocks
+    x_block_size = 1024
+    y_block_size = 32
+    #create iterator to process blocks of imagery one by one. #get 10% subset
+    it = list(range(0,200000, 20))
+    #initiate nparray
+    subset = np.array((), dtype = np.uint8)
+    subset = subset.reshape(0,2)
 
-    #take random subset of image nog toevoegen maar nu geen internet    
-    Lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    Lab_flat = Lab.flatten()
-    Lab = None
-    
-    subset = scipy.random.choice(Lab_flat, size = (len(Lab_flat)//10), replace = False)
-    Lab_flat = None
+    #iterate through img using blocks
+    blocks = 0
+    for y in range(0, ysize, y_block_size):
+        if y > 0:
+            y = y
+        if y + y_block_size < ysize:
+            rows = y_block_size
+        else:
+            rows = ysize - y
+        for x in range(0, xsize, x_block_size):
+            if x > 0:
+                x = x
+            blocks += 1
+            #if statement for subset
+            if blocks in it:
+                if x + x_block_size < xsize:
+                    cols = x_block_size
+                else:
+                    cols = xsize - x
+                #read bands as array
+                r = np.array(ds.GetRasterBand(1).ReadAsArray(x, y, cols, rows), dtype = np.uint(8))
+                g = np.array(ds.GetRasterBand(2).ReadAsArray(x, y, cols, rows), dtype = np.uint(8))
+                b = np.array(ds.GetRasterBand(3).ReadAsArray(x, y, cols, rows), dtype = np.uint(8))
+                img = np.zeros([b.shape[0],b.shape[1],3], np.uint8)
+                img[:,:,0] = b
+                img[:,:,1] = g
+                img[:,:,2] = r
+                if img.mean() != 0:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+                    img = img[:,:,1:3]
+                    flattened_arr = img.reshape(-1, img.shape[-1])
+                    subset = np.append(flattened_arr, subset, axis = 0)
+
     #get a and b band of subset
-    a = subset[:,1]
-    b = subset[:,2]
+    a = subset[:,0]
+    b = subset[:,1]
     subset = None
 
     #stack bands to create final input for clustering algorithm
@@ -58,6 +123,7 @@ def fit_kmeans_on_subset(ds, kmeans_init):
     toc = time.time()
 
     print('Processing took ' + str(toc-tic) + ' seconds')
+    
     return kmeans
 
 
@@ -269,21 +335,26 @@ def cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, 
     
                     #stack bands to create final input for clustering algorithm
                     Classificatie_Lab = np.column_stack((a_flat, b2_flat))
-    
-                    #fit kmeans to data distribution of block if iterative fit == True
-                    if iterative_fit == True:
-                        kmeans = KMeans(init = kmeans_init, n_jobs = -1, max_iter = 25, n_clusters = kmeans_init.shape[0], verbose = 0)
-                        if len(mask_flat) == len(Classificatie_Lab):
-                            y_kmeans = kmeans.fit_predict(Classificatie_Lab[mask_flat == False])
-                            kmeans_result = np.zeros((a_flat.shape))
-                            kmeans_result[mask_flat == False] = y_kmeans
-                            y_kmeans = kmeans_result.copy()
-                        else:
-                            y_kmeans = kmeans.fit_predict(Classificatie_Lab)
-                    else:
-                        #dont fit on image block, only classify
-                        y_kmeans = kmeans.predict(Classificatie_Lab)
                     
+                    #check if the image block has enough data values
+                    #ik denk dat deze test om een reden niet de gewenste output geeft, nu testen met een try en except
+                    #if len(mask_flat[mask_flat == False]) > kmeans_init.shape[0]:
+                        #fit kmeans to data distribution of block if iterative fit == True
+                    try:
+                        if iterative_fit == True:
+                            kmeans = KMeans(init = kmeans_init, n_jobs = -1, max_iter = 25, n_clusters = kmeans_init.shape[0], verbose = 0)
+                            if len(mask_flat) == len(Classificatie_Lab):
+                                y_kmeans = kmeans.fit_predict(Classificatie_Lab[mask_flat == False])
+                                kmeans_result = np.zeros((a_flat.shape))
+                                kmeans_result[mask_flat == False] = y_kmeans
+                                y_kmeans = kmeans_result.copy()
+                            else:
+                                y_kmeans = kmeans.fit_predict(Classificatie_Lab)
+                        else:
+                            #dont fit on image block, only classify
+                            y_kmeans = kmeans.predict(Classificatie_Lab)
+                    except:
+                        continue
                     #get different classes
                     unique, counts = np.unique(y_kmeans, return_counts=True)
     
@@ -294,17 +365,23 @@ def cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, 
                     get_green = np.argmax(centres[:,1] - centres[:,0])
                     get_background = np.argmin(centres[:,1])
                     get_remaining = np.argmax(centres[:, 0])
-    
-                    #create binary output, green is one the rest is zero
-                    y_kmeans[y_kmeans == get_green] = 10
-                    y_kmeans[y_kmeans == get_background] = 5
-                    y_kmeans[(y_kmeans < 5)] = 0
-    
+                    
+                    #get clustering result to write as output
+                    clustering_result = y_kmeans.reshape(img.shape[0:2]).astype(np.uint8)
+                    
+                    #test if greenest cluster is actually green enough
+                    if (centres[:,1] - centres[:,0]).max() > 6:                        
+                        #create binary output, green is one the rest is zero
+                        y_kmeans[y_kmeans == get_green] = 10
+                        y_kmeans[y_kmeans == get_background] = 5
+                        y_kmeans[(y_kmeans < 5)] = 0
+                    #If not green enough everything is zero
+                    else:
+                        y_kmeans[y_kmeans < 255] = 0
                     #convert binary output back to 8bit image
                     kmeans_img = y_kmeans
                     kmeans_img = kmeans_img.reshape(img.shape[0:2]).astype(np.uint8)
                     ret,binary_img = cv2.threshold(kmeans_img,9,255,cv2.THRESH_BINARY)
-                    clustering_result = kmeans_img * 25
     
                     #optional erode to deal with overlap
                     #binary_img = cv2.erode(binary_img, kernel2, iterations = 1)  
