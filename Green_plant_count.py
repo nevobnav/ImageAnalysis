@@ -15,8 +15,8 @@ import numpy as np
 import gdal
 import multiprocessing as mp
 
-os.chdir(os.path.dirname(os.path.dirname(sys.argv[0])))# + '/ImageAnalysis')
-#os.chdir(r'C:\Users\ericv\Dropbox\Python scripts\GitHub')
+#os.chdir(os.path.dirname(os.path.dirname(sys.argv[0])))# + '/ImageAnalysis')
+os.chdir(r'C:\Users\VanBoven\Documents\GitHub')
 
 import ImageAnalysis.vector_functions as vector_functions
 import ImageAnalysis.raster_functions as raster_functions
@@ -31,7 +31,7 @@ import VanBovenProcessing.clip_ortho_2_plot_gdal as clip_ortho_2_plot_gdal
 #Specify paths
 
 #Input img_path
-img_paths = [r"D:\VanBovenDrive\VanBoven MT\Archive\c03_termote\De Boomgaard\20190915\1112\Orthomosaic\c03_termote-De Boomgaard-201909151112.tif"]
+img_paths = [r"D:\VanBovenDrive\VanBoven MT\Archive\c07_hollandbean\Osseweyer\20190529\0830\Orthomosaic\c07_hollandbean-Osseweyer-201905290830-GR.vrt"]
 # =============================================================================
 # img_paths = [r"D:\VanBovenDrive\VanBoven MT\Archive\c07_hollandbean\Joke Visser\20190603\1020\Orthomosaic\c07_hollandbean-Joke Visser-201906031020.tif",
 #              r"D:\VanBovenDrive\VanBoven MT\Archive\c07_hollandbean\Joke Visser\20190619\1208\Orthomosaic\c07_hollandbean-Joke Visser-201906191208-GR.tif",
@@ -47,7 +47,7 @@ img_paths = [r"D:\VanBovenDrive\VanBoven MT\Archive\c03_termote\De Boomgaard\201
 
 
 #Output path
-out_path = r'D:\800 Operational\c03_termote\De Boomgaard\20190915\1112' 
+out_path = r'D:\800 Operational\c07_hollandbean\Osseweyer\20190529' 
 #Specify path to clip_shp
 clip_shp = r"D:\800 Operational\c08_biobrass\QZ23\20190819\1441\clip_lettuce.shp"
 
@@ -69,15 +69,15 @@ y_block_size = 512
 it = list(range(0,200000, 1))
 
 #True if you want to generate shapefile output with points and shapes of plants
-vectorize_output = True
+vectorize_output = False
 #True if you want to fit the cluster centres iteratively to every image block, false if you fit in once to a random 10% subset of the entire ortho
-iterative_fit = False
+iterative_fit = True
 #True to clip ortho to clip_shape (usefull for removing grass around the fields)
 clip_ortho2shp = False
 #True to create a tif file of the plant mask of the image.
 tif_output = True
 #True if you want to write plant count and segmentation from clustering to file
-write_shp2file = True
+write_shp2file = False
 #nr_clusters = 2 or 3 depending on desired segmentation results. 3 is better for plant count. 2 can perform better for segmentation of grown crops
 nr_clusters = 2
 #specify if you also want to use clustering algorithm for getting a plant count with area and shapes
@@ -86,7 +86,25 @@ perform_clustering = True
 perform_local_max = False
 
 #number of processes for the multiprocessing part
-n_processes = 4
+n_processes = 12
+
+#%%
+
+#Set initial cluster centres for clustering algorithm based on sampling in images
+cover_lab = cv2.cvtColor(np.array([[[165,159,148]]]).astype(np.uint8), cv2.COLOR_BGR2LAB)
+cover_init = np.array(cover_lab[0,0,1:3], dtype = np.uint8)
+background_init = cv2.cvtColor(np.array([[[120,125,130]]]).astype(np.uint8), cv2.COLOR_BGR2LAB) # as sampled from tif file
+background_init = np.array(background_init[0,0,1:3])
+green_lab = cv2.cvtColor(np.array([[[87,116,89]]]).astype(np.uint8), cv2.COLOR_BGR2LAB)
+green_init = np.array(green_lab[0,0,1:3])
+
+#Create init input for clustering algorithm
+if nr_clusters == 3:    
+    kmeans_init = np.array([background_init, green_init, cover_init])
+elif nr_clusters == 2:
+    kmeans_init = np.array([background_init, green_init])
+else:
+    kmeans_init = np.array([background_init, green_init, cover_init])     
 
 #%%
 #Set variables for local maxima plant count
@@ -105,35 +123,7 @@ for img_path in img_paths:
     threshold = 1.8
     
     block_size = 3000
-    #%%
 
-    #Perform clustering
-#    plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
-    imgs, xs, ys, cols_list, rows_list, kmeans = plant_count_functions.divide_into_blocks(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it)
-    p = mp.Pool(n_processes)
-    results = [p.apply_async(plant_count_functions.cluster_objects_block, (imgs[i], no_data_value, iterative_fit, kmeans)) for i in range(len(imgs))]
-    closings = [res.get()[0] for res in results]
-    clustering_results = [res.get()[1] for res in results]
-    plant_pixels, clustering_output = plant_count_functions.handle_output(closings, clustering_results, xs, ys, cols_list, rows_list, xsize, ysize)
-
-    #Set initial cluster centres for clustering algorithm based on sampling in images
-    cover_lab = cv2.cvtColor(np.array([[[165,159,148]]]).astype(np.uint8), cv2.COLOR_BGR2LAB)
-    cover_init = np.array(cover_lab[0,0,1:3], dtype = np.uint8)
-    background_init = cv2.cvtColor(np.array([[[120,125,130]]]).astype(np.uint8), cv2.COLOR_BGR2LAB) # as sampled from tif file
-    background_init = np.array(background_init[0,0,1:3])
-    green_lab = cv2.cvtColor(np.array([[[87,116,89]]]).astype(np.uint8), cv2.COLOR_BGR2LAB)
-    green_init = np.array(green_lab[0,0,1:3])
-
-    #Create init input for clustering algorithm
-    if nr_clusters == 3:    
-        kmeans_init = np.array([background_init, green_init, cover_init])
-    elif nr_clusters == 2:
-        kmeans_init = np.array([background_init, green_init])
-    else:
-        kmeans_init = np.array([background_init, green_init, cover_init])
-        
-    
-    
     #%%
     #Set other variables
     
@@ -147,6 +137,7 @@ for img_path in img_paths:
             ds = clip_ortho_2_plot_gdal.clip_ortho2shp_array(img_path, clip_shp)
         else:
             ds = gdal.Open(img_path)
+
     
         #%% 
         if perform_local_max == True:
@@ -186,7 +177,16 @@ for img_path in img_paths:
         #%%
         if perform_clustering == True:
             #Perform clustering
-            plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
+            #plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
+            imgs, xs, ys, cols_list, rows_list, kmeans = plant_count_functions.divide_into_blocks(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it)
+            p = mp.Pool(n_processes)
+            results = [p.apply_async(plant_count_functions.cluster_objects_block, (imgs[i], no_data_value, iterative_fit, kmeans)) for i in range(len(imgs))]
+            closings = [res.get()[0] for res in results]
+            clustering_results = [res.get()[1] for res in results]
+            plant_pixels, clustering_output = plant_count_functions.handle_output(closings, clustering_results, xs, ys, cols_list, rows_list, xsize, ysize)
+                    
+            #Perform clustering
+            #plant_pixels, clustering_output = plant_count_functions.cluster_objects(x_block_size, y_block_size, ds, kmeans_init, iterative_fit, it, no_data_value)
             
             #Write clustering output to tif to be able to inspect
             raster_functions.array2tif(img_path, out_path, clustering_output, name_extension = 'clustering_output')
