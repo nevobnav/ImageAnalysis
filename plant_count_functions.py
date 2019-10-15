@@ -179,7 +179,7 @@ def divide_into_blocks(x_block_size, y_block_size, ds, kmeans_init, iterative_fi
                 ys.append(y)
                 cols_list.append(cols)
                 rows_list.append(rows)
-    return imgs, xs, ys, cols_list, rows_list, kmeans
+    return imgs, xs, ys, cols_list, rows_list, kmeans if iterative_fit else None
 
 def cluster_objects_block(img, no_data_value, iterative_fit, kmeans_init):
     if (img.mean() < 255) and (img.mean() > 0): 
